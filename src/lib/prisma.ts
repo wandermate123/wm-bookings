@@ -15,6 +15,21 @@ function createPrisma(): PrismaClient {
   return new PrismaClient({ adapter });
 }
 
-/** Shared client for Node server (API routes). Uses Neon pooled `DATABASE_URL` + WebSockets. */
-export const prisma =
-  globalForPrisma.prisma ?? (globalForPrisma.prisma = createPrisma());
+function getPrismaClient(): PrismaClient {
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = createPrisma();
+  }
+  return globalForPrisma.prisma;
+}
+
+/**
+ * Lazy client so a missing `DATABASE_URL` fails on first query (inside route try/catch), not at import.
+ * Use Neon **pooled** `DATABASE_URL` on Vercel (`-pooler` host).
+ */
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, prop, receiver) {
+    const client = getPrismaClient();
+    const value = Reflect.get(client, prop, receiver);
+    return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(client) : value;
+  },
+});

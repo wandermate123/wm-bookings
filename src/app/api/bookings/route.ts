@@ -3,6 +3,8 @@ import { getBookablePackageById } from "@/lib/all-packages";
 import { applyCheckoutTax } from "@/lib/checkout-tax";
 import { prisma } from "@/lib/prisma";
 
+export const runtime = "nodejs";
+
 const SPECIAL_REQUESTS_MAX_LEN = 2000;
 
 export type BookingPayload = {
@@ -160,9 +162,17 @@ export async function POST(req: Request) {
       },
     });
   } catch (e) {
-    console.error("Booking insert failed", e);
+    const code =
+      e && typeof e === "object" && "code" in e ? String((e as { code: unknown }).code) : undefined;
+    console.error("Booking insert failed", code ?? "no-code", e);
     return NextResponse.json(
-      { error: "Could not save booking. Try again in a moment." },
+      {
+        error: "Could not save booking. Try again in a moment.",
+        ...(process.env.NODE_ENV === "development" && {
+          debug: e instanceof Error ? e.message : String(e),
+          code,
+        }),
+      },
       { status: 503 },
     );
   }
