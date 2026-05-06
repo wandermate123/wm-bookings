@@ -31,8 +31,12 @@ model Booking {
   totalInr        Int
   /// Set when a Razorpay order is created (Checkout).
   razorpayOrderId String? @unique
-  /// e.g. pending | paid | cancelled — wire payment webhooks next.
-  status          String   @default("pending")
+  /// Razorpay payment id after successful capture (webhook).
+  razorpayPaymentId String? @unique
+  /// When payment was confirmed via webhook.
+  paidAt            DateTime?
+  /// e.g. pending | paid | cancelled
+  status            String   @default("pending")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
