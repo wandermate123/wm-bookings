@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 };
 
 const spiritualDefault = SPIRITUAL_TRIANGLE_VARIANTS.find((v) => v.variantSlug === "4n5d")!;
-const varanasiDefault = VARANASI_PACKAGE_VARIANTS.find((v) => v.variantSlug === "3n4d")!;
+const varanasiDefault = VARANASI_PACKAGE_VARIANTS.find((v) => v.variantSlug === "1n2d")!;
 
 export default function BookIndexPage() {
   return (
