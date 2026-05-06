@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookingFaq } from "@/components/BookingFaq";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SpiritualTriangleBooking } from "@/components/SpiritualTriangleBooking";
-import { getVaranasiBookingPath } from "@/lib/varanasi-packages";
 import {
   getSpiritualVariantBySlug,
   SPIRITUAL_TRIANGLE_VARIANTS,
@@ -38,21 +36,6 @@ export default async function SpiritualTriangleVariantPage({ params }: Props) {
       <main className="flex-1">
         <section className="border-b border-black/5 bg-white">
           <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
-            <p className="mb-4 text-center text-sm text-wm-navy-deep/70">
-              <Link
-                href="/book"
-                className="text-wm-blue underline-offset-2 hover:underline"
-              >
-                ← All packages
-              </Link>
-              <span className="mx-2 text-wm-navy-deep/40">·</span>
-              <Link
-                href={getVaranasiBookingPath("3n4d")}
-                className="text-wm-blue underline-offset-2 hover:underline"
-              >
-                Varanasi Package
-              </Link>
-            </p>
             <div className="grid gap-10 lg:grid-cols-12 lg:items-start lg:gap-12">
               <div className="lg:col-span-7">
                 <SpiritualTriangleBooking variantSlug={pkg.variantSlug} />

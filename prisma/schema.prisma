@@ -1,0 +1,42 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Record created when a guest submits the booking form (payment will update `status` later).
+model Booking {
+  id              String   @id @default(cuid())
+  reference       String   @unique
+  packageId       String
+  tripStart       DateTime @db.Date
+  tripEnd         DateTime @db.Date
+  adults          Int
+  children        Int
+  addOnIds        String[]
+  guestName       String
+  email           String
+  phone           String
+  specialRequests String?
+  subtotalInr     Int
+  taxInr          Int
+  totalInr        Int
+  /// Set when a Razorpay order is created (Checkout).
+  razorpayOrderId String? @unique
+  /// e.g. pending | paid | cancelled — wire payment webhooks next.
+  status          String   @default("pending")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([tripStart])
+}

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getBookablePackageById } from "@/lib/all-packages";
 import { applyCheckoutTax } from "@/lib/checkout-tax";
+import { prisma } from "@/lib/prisma";
 
 const SPECIAL_REQUESTS_MAX_LEN = 2000;
 
@@ -135,9 +136,40 @@ export async function POST(req: Request) {
 
   const reference = `WM-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
+  const tripStartDate = new Date(`${data.tripStart}T00:00:00.000Z`);
+  const tripEndDate = new Date(`${tripEnd}T00:00:00.000Z`);
+
+  try {
+    await prisma.booking.create({
+      data: {
+        reference,
+        packageId: data.packageId,
+        tripStart: tripStartDate,
+        tripEnd: tripEndDate,
+        adults: data.adults,
+        children: data.children,
+        addOnIds: data.addOnIds,
+        guestName: data.guestName,
+        email: data.email,
+        phone: data.phone,
+        specialRequests: data.specialRequests || null,
+        subtotalInr,
+        taxInr,
+        totalInr,
+        status: "pending",
+      },
+    });
+  } catch (e) {
+    console.error("Booking insert failed", e);
+    return NextResponse.json(
+      { error: "Could not save booking. Try again in a moment." },
+      { status: 503 },
+    );
+  }
+
   return NextResponse.json({
     reference,
-    status: "confirmed",
+    status: "pending",
     package: `${pkg.title} — ${pkg.durationLabel}`,
     packageId: pkg.id,
     tripStart: data.tripStart,
@@ -150,6 +182,6 @@ export async function POST(req: Request) {
     taxInr,
     totalInr,
     message:
-      "Booking recorded. Connect your payment gateway webhook to mark paid before treating as final in production.",
+      "Booking saved. Complete payment when the gateway is connected; until then this is a provisional record.",
   });
 }

@@ -23,6 +23,30 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function loadRazorpayScript(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if ((window as unknown as { Razorpay?: unknown }).Razorpay) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("Could not load payment script."));
+    document.body.appendChild(s);
+  });
+}
+
+type RazorpaySuccess = {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+};
+
+type RazorpayCtor = new (options: Record<string, unknown>) => {
+  open: () => void;
+  on: (event: string, fn: (payload: { error?: { description?: string } }) => void) => void;
+};
+
 function WhatsAppGlyph({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="#25D366" aria-hidden>
@@ -67,6 +91,12 @@ export function MultiDayPackageBooking({
     taxInr: number;
     totalInr: number;
     packageLabel: string;
+    /** Razorpay keys missing — booking still saved */
+    paymentSkipped?: boolean;
+    /** Checkout closed / pay not completed — booking still saved */
+    paymentPendingNote?: boolean;
+    /** Client-side payment id — confirm only after webhook (Step 4) */
+    razorpayPaymentId?: string;
   } | null>(null);
 
   const tripEnd =
@@ -142,6 +172,7 @@ export function MultiDayPackageBooking({
     if (!bookingPkg) return;
     setError(null);
     setSubmitting(true);
+    let checkoutOpened = false;
     try {
       const addOnIds = Object.entries(addOns)
         .filter(([, v]) => v)
@@ -166,18 +197,85 @@ export function MultiDayPackageBooking({
         setError(typeof data.error === "string" ? data.error : "Something went wrong");
         return;
       }
-      setResult({
-        reference: data.reference,
-        tripEnd: data.tripEnd,
-        subtotalInr: data.subtotalInr,
-        taxInr: data.taxInr,
-        totalInr: data.totalInr,
+
+      const bookingPayload = {
+        reference: data.reference as string,
+        tripEnd: data.tripEnd as string,
+        subtotalInr: data.subtotalInr as number,
+        taxInr: data.taxInr as number,
+        totalInr: data.totalInr as number,
         packageLabel: typeof data.package === "string" ? data.package : bookingPkg.title,
+      };
+
+      const orderRes = await fetch("/api/payments/razorpay/order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reference: bookingPayload.reference }),
       });
+      const orderJson = await orderRes.json();
+
+      if (orderRes.status === 501) {
+        setResult({ ...bookingPayload, paymentSkipped: true });
+        return;
+      }
+
+      if (!orderRes.ok) {
+        setError(typeof orderJson.error === "string" ? orderJson.error : "Could not start payment.");
+        setResult({ ...bookingPayload, paymentPendingNote: true });
+        return;
+      }
+
+      checkoutOpened = true;
+      await loadRazorpayScript();
+      const Razorpay = (window as unknown as { Razorpay: RazorpayCtor }).Razorpay;
+
+      const options: Record<string, unknown> = {
+        key: orderJson.keyId as string,
+        amount: orderJson.amount as number,
+        currency: (orderJson.currency as string) ?? "INR",
+        order_id: orderJson.orderId as string,
+        name: "WanderMate",
+        description: `Booking ${bookingPayload.reference}`,
+        prefill: {
+          name: guestName.trim(),
+          email: email.trim(),
+          contact: phone.replace(/\D/g, ""),
+        },
+        theme: { color: "#0f2744" },
+        handler(rzpResponse: RazorpaySuccess) {
+          setSubmitting(false);
+          setResult({
+            ...bookingPayload,
+            razorpayPaymentId: rzpResponse.razorpay_payment_id,
+          });
+        },
+        modal: {
+          ondismiss() {
+            setSubmitting(false);
+            setResult({
+              ...bookingPayload,
+              paymentPendingNote: true,
+            });
+          },
+        },
+      };
+
+      const rzp = new Razorpay(options);
+      rzp.on("payment.failed", (payload) => {
+        setSubmitting(false);
+        setError(payload.error?.description ?? "Payment failed.");
+        setResult({
+          ...bookingPayload,
+          paymentPendingNote: true,
+        });
+      });
+      rzp.open();
     } catch {
       setError("Network error — try again.");
     } finally {
-      setSubmitting(false);
+      if (!checkoutOpened) {
+        setSubmitting(false);
+      }
     }
   }
 
@@ -185,10 +283,10 @@ export function MultiDayPackageBooking({
     return (
       <div className="rounded-sm border border-black/10 bg-white px-6 py-10 text-center shadow-sm sm:px-10">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-wm-navy/60">
-          Confirmed
+          Received
         </p>
         <h2 className="mt-3 font-display text-2xl font-semibold text-wm-navy sm:text-3xl">
-          You&apos;re booked
+          Booking saved
         </h2>
         <p className="mt-2 text-sm text-wm-navy-deep/80">
           Reference{" "}
@@ -209,7 +307,24 @@ export function MultiDayPackageBooking({
           Total {formatInr(result.totalInr)}
         </p>
         <p className="mt-6 text-xs text-wm-navy-deep/60">
-          A confirmation email will be sent once payment gateway + email are connected.
+          {result.razorpayPaymentId ? (
+            <>
+              Payment ID{" "}
+              <span className="font-mono">{result.razorpayPaymentId}</span> — your bank may still be
+              processing. We will mark the booking paid only after verification (webhook).
+            </>
+          ) : result.paymentSkipped ? (
+            <>
+              Card/UPI checkout is not configured on the server. Your booking is saved — pay or
+              confirm via WhatsApp below.
+            </>
+          ) : result.paymentPendingNote ? (
+            <>Payment was not completed. Your booking is saved — use the reference above or WhatsApp.</>
+          ) : (
+            <>
+              A confirmation email will be sent once payment gateway + email are connected.
+            </>
+          )}
         </p>
       </div>
     );

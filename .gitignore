@@ -26,3 +26,8 @@ yarn-error.log*
 # env
 .env
 .env*.local
+
+# Prisma generated client (created by `prisma generate` / `npm install`)
+/src/generated/
+
+/src/generated/prisma
