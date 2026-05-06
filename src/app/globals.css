@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --wm-navy: #0f2744;
+  --wm-orange: #e86228;
+}
+
+html {
+  scroll-behavior: smooth;
+}
